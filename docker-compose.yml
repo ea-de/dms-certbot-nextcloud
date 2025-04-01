@@ -1,0 +1,61 @@
+---
+services:
+  mailserver:
+    image: docker.io/mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail
+    domainname: my-new-email.com
+    ports:
+      - "25:25"
+      - "143:143"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - ./dms/mail-data/:/var/mail/
+      - ./dms/mail-state/:/var/mail-state/
+      - ./dms/mail-logs/:/var/log/mail/
+      - ./dms/config/:/tmp/docker-mailserver/
+      - ./certbot/certs/:/etc/letsencrypt/
+    environment:
+      - ENABLE_SPAMASSASSIN=1
+      - ENABLE_CLAMAV=0
+      - ENABLE_FAIL2BAN=1
+      - ENABLE_POSTGREY=1
+      - ONE_DIR=1
+      - DMS_DEBUG=0
+      - SSL_TYPE=letsencrypt
+    restart: always
+
+  certbot:
+    build:
+      context: .
+      dockerfile: Dockerfile.certbot
+    container_name: certbot
+    volumes:
+      - ./certbot/certs/:/etc/letsencrypt/
+      - ./certbot/config:/etc/letsencrypt/config
+    command: >
+      certonly --authenticator dns-hetzner
+      --dns-hetzner-credentials /etc/letsencrypt/config/hetzner.ini
+      --dns-hetzner-propagation-seconds 30
+      -d my-new-email.com
+      --non-interactive --agree-tos --email me@my-new-email.com
+
+  nextcloud:
+    image: nextcloud
+    container_name: nextcloud
+    ports:
+      - "8080:80"
+    volumes:
+      - nextcloud_data:/var/www/html
+    environment:
+      - VIRTUAL_HOST=my-new-nextcloud.com
+      - LETSENCRYPT_HOST=my-new-nextcloud.com
+      - LETSENCRYPT_EMAIL=me@my-new-nextcloud.com
+    depends_on:
+      - mailserver
+
+volumes:
+  nextcloud_data:
+    driver: local
